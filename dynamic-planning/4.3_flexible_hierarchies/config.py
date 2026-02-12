@@ -20,7 +20,7 @@ ball_dir = None
 
 tool_pos = [380, -280] 
 tool_length = 200
-tool_vel = 0 #3
+tool_vel = 3
 tool_dir = None
 tool_angle = 30
 
