@@ -3,6 +3,55 @@ Neural network reward prediction model f(τ, c) → R; takes in tool design para
 and task description c and outputs a scalar reward
 """
 
+import torch
+from torch import nn
+from torch.utils.data import DataLoader
+
+
+# create a custom dataloader for custom tool dataset
+
+
+# 8 input dim (l1,l2, sin(theta), cos(theta), x_t, y_t, x_o, y_o)
+
+# architecture
+# MLP 8 -> 128 nodes (ReLU) -> 128 nodes (ReLU) -> 64 nodes (ReLU) -> output (1)
+
+# work out normalisation of inputs
+# Data Size
+# how to best represent the angles to handle wrap around
+
+# define device make sure GPU enabled and working
+
+
+
+# Define model
+class NeuralNetwork(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.flatten = nn.Flatten()
+        self.linear_relu_stack = nn.Sequential(
+            nn.Linear(28*28, 512),
+            nn.ReLU(),
+            nn.Linear(512, 512),
+            nn.ReLU(),
+            nn.Linear(512, 10)
+        )
+
+    def forward(self, x):
+        x = self.flatten(x)
+        logits = self.linear_relu_stack(x)
+        return logits
+
+model = NeuralNetwork().to(device)
+print(model)
+
+
+
+
+
+
+
+
 class RewardModel:    
     def __init__(self, input_dim, hidden_dim=64):
         """
@@ -12,8 +61,6 @@ class RewardModel:
             input_dim (int): Dimension of the combined design and task vector.
             hidden_dim (int): Number of units in the hidden layers.
         """
-        import torch
-        import torch.nn as nn
         
         self.model = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),

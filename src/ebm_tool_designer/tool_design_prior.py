@@ -1,40 +1,51 @@
 """
 Unconditioned prior over tool designs. Sampling from this prior will give you random tools.
+Right now it is independent factors of l1, l2, theta sampled from uniform distributions.
+We will extend towards more expressive and complex priors in the future.
 """
 
 import numpy as np
 from helpers.plots import visualise_tools
 
 class ToolDesignPrior:
-    def __init__(self, l1_mu, l1_sigma, l2_mu, l2_sigma, theta_mu, theta_sigma):
+    def __init__(self, l1_range, l2_range, theta_range):
         """
-        Initialises the Gaussian priors for the tool parameters.
+        l1_range/l2_range: tuples (min, max)
+        theta_range: tuple (min_deg, max_deg)
         """
-        self.priors = {
-            'l1': (l1_mu, l1_sigma),
-            'l2': (l2_mu, l2_sigma),
-            'theta': (np.radians(theta_mu), np.radians(theta_sigma))
-        }
+        self.l1_bounds = l1_range
+        self.l2_bounds = l2_range
+        self.theta_bounds = (np.radians(theta_range[0]), np.radians(theta_range[1]))
 
     def sample_design(self, n_samples=1):
-        """Samples n tool designs from the Gaussian priors."""
-        samples = {}
-        for param, (mu, sigma) in self.priors.items():
-            samples[param] = np.random.normal(mu, sigma, n_samples)
+        """Samples tools using Uniform priors (simplest for EBM discovery)."""
+        l1 = np.random.uniform(self.l1_bounds[0], self.l1_bounds[1], n_samples)
+        l2 = np.random.uniform(self.l2_bounds[0], self.l2_bounds[1], n_samples)
+        theta = np.random.uniform(self.theta_bounds[0], self.theta_bounds[1], n_samples)
         
-        # Ensure lengths are positive (clipping at a small epsilon)
-        samples['l1'] = np.maximum(samples['l1'], 0.1)
-        samples['l2'] = np.maximum(samples['l2'], 0.1)
+        # Pre-calculate sin/cos for your Reward Network input
+        sin_theta = np.sin(theta)
+        cos_theta = np.cos(theta)
         
-        return samples
+        return {
+            'l1': l1,
+            'l2': l2,
+            'theta': theta,
+            'sin_theta': sin_theta,
+            'cos_theta': cos_theta
+        }
 
 def main():
-    # Define priors: (mean, std_dev)
-    model = ToolDesignPrior(200, 50, 200, 50, 180, 90)
+    # Define ranges [Lower, Upper]
+    l1_range = (150,300)
+    l2_range = (150,300)
+    theta_range = (0,360)
+    
+    tool_prior = ToolDesignPrior(l1_range, l2_range, theta_range)
 
-    # Generate 5 random designs
     num_designs = 12
-    designs = model.sample_design(num_designs)
+    designs = tool_prior.sample_design(num_designs)
+
     visualise_tools(designs)
     
 if __name__ == "__main__":
