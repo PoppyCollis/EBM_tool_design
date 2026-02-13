@@ -2,6 +2,9 @@
 Unconditioned prior over tool designs. Sampling from this prior will give you random tools.
 Right now it is independent factors of l1, l2, theta sampled from uniform distributions.
 We will extend towards more expressive and complex priors in the future.
+
+Note that we return sin(theta) and cos(theta) so that the network understands that 0 is near 360
+(i.e. we deal with the wrap around problem).
 """
 
 import numpy as np

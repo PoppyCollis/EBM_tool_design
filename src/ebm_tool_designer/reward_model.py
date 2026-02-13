@@ -45,13 +45,6 @@ class NeuralNetwork(nn.Module):
 model = NeuralNetwork().to(device)
 print(model)
 
-
-
-
-
-
-
-
 class RewardModel:    
     def __init__(self, input_dim, hidden_dim=64):
         """
