@@ -5,11 +5,11 @@ import numpy as np
 from reward_model import MLP
 import torch
 from tool_design_prior import ToolDesignPrior
-from config import ToolDatasetConfig
+from config import ToolDatasetConfig, EBMConfig
 
     
 class EnergyBasedModel:    
-    def __init__(self, prior, weights_path):
+    def __init__(self, prior, device, weights_path):
         """
         Initializes the EBM with a prior and a reward model.
         
@@ -17,12 +17,13 @@ class EnergyBasedModel:
             prior (ToolDesignPrior): The unconditioned prior over tool designs.
             weights_path (str): Path to the pre-trained reward model weights.
         """
-        self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+        self.device = device
         self.criterion = torch.nn.MSELoss()
         self.prior = prior
         # load in pre-trained reward model weights
         self.reward_model = self.load_reward_model(weights_path)
-        self.sigma = 0.01
+        self.sigma = EBMConfig.SIGMA
+        
         
     def load_reward_model(self, weights_path):
         # load in architecture (must match one used for pre-trained model weights)
@@ -80,7 +81,9 @@ def main():
 
     prior = ToolDesignPrior(l1_bounds, l2_bounds, theta_bounds)
     
-    ebm = EnergyBasedModel(prior, weights_path=weights_path)
+    device = EBMConfig.DEVICE
+    
+    ebm = EnergyBasedModel(prior, device, weights_path=weights_path)
 
 if __name__ == "__main__":
     main()
