@@ -54,3 +54,33 @@ def visualise_tools(designs):
         axes[j].axis('off')
 
     plt.show()
+    
+    
+def plot_losses(epochs, epoch_train_losses, epoch_val_losses, title= "Loss vs Epochs"):  
+    plt.plot(range(epochs), epoch_train_losses, label='Train')
+    plt.plot(range(epochs), epoch_val_losses, label='Validation')
+    plt.ylabel('Loss')
+    plt.xlabel('epoch')
+    plt.legend()
+    plt.title(title)
+    plt.show()
+    
+def plot_mean_losses(epochs, mean_train_loss, std_train_loss, mean_val_loss, std_val_loss, title= "Mean Loss vs Epochs"):
+    x_axis = range(epochs)
+    
+    plt.plot(x_axis, mean_train_loss, label='Mean train Loss')
+    plt.fill_between(x_axis, 
+                 mean_train_loss - std_train_loss, 
+                 mean_train_loss + std_train_loss, 
+                 alpha=0.2, label='$\pm$ 1 Std Dev')
+    
+    plt.plot(x_axis, mean_val_loss, label='Mean val Loss')
+    plt.fill_between(x_axis, 
+                 mean_val_loss - std_val_loss, 
+                 mean_val_loss + std_val_loss, 
+                 alpha=0.2, label='$\pm$ 1 Std Dev')
+    plt.legend()
+    plt.ylabel('Loss')
+    plt.xlabel('epoch')
+    plt.title(title)
+    plt.show()

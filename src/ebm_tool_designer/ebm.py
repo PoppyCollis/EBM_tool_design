@@ -4,6 +4,25 @@ Convert tool design prior and reward prediction model into an energy-based model
 import numpy as np
 
 
+class ToolDesignPrior:
+    def __init__(self, l1_bounds, l2_bounds, theta_bounds):
+        self.l1_bounds = l1_bounds
+        self.l2_bounds = l2_bounds
+        self.theta_bounds = theta_bounds
+        
+        
+    def sample(self, n_samples=1):
+        
+        l1 = np.random.uniform(self.l1_bounds[0], self.l1_bounds[1], n_samples)
+        l2 = np.random.uniform(self.l2_bounds[0], self.l2_bounds[1], n_samples)
+        theta = np.random.uniform(self.theta_bounds[0], self.theta_bounds[1], n_samples)
+        
+        # 1. Pre-calculate sin/cos 
+        sin_theta = np.sin(theta)
+        cos_theta = np.cos(theta)
+        
+        return l1,l2,sin_theta,cos_theta
+    
 class EnergyBasedModel:    
     def __init__(self, prior, reward_model):
         """
@@ -15,18 +34,13 @@ class EnergyBasedModel:
         """
         self.prior = prior
         self.reward_model = reward_model
+        #load in reward model weights
 
-    def energy(self, designs, task_description):
+    def energy(self):
         """
         Calculates the energy for a given set of designs and task.
-        E(τ) = 1/2 σ^2 (r-fθ(τ, c))^2 + 1/2 ∥τ ∥_2^2
-        
-        Args:
-            designs (dict): Dictionary of design parameters (l1, l2, theta).
-            task_description: The context/task vector c.
         """        
         # Get reward prediction
-        reward = self.reward_model.predict(designs, task_description)
         E = ...
         # Energy is negative log-probability
         return E
@@ -41,3 +55,19 @@ class EnergyBasedModel:
             pass
         else:
             raise NotImplementedError("Sampling method not supported.")
+
+
+
+
+    # --- LOADING ---
+    # 1. Re-create the model architecture first
+    model = MLP(in_features=6)
+
+    # 2. Load the dictionary
+    checkpoint = torch.load(save_path)
+
+    # 3. Load the weights into the model
+    model.load_state_dict(checkpoint['model_state_dict'])
+
+    # 4. Don't forget to set to eval mode if you're done training
+    model.eval()
