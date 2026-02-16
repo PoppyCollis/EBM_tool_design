@@ -57,13 +57,16 @@ def visualise_tools(designs):
     
     
 def plot_losses(epochs, epoch_train_losses, epoch_val_losses, title= "Loss vs Epochs"):  
+    
     plt.plot(range(epochs), epoch_train_losses, label='Train')
     plt.plot(range(epochs), epoch_val_losses, label='Validation')
     plt.ylabel('Loss')
     plt.xlabel('epoch')
     plt.legend()
     plt.title(title)
+    
     plt.show()
+    
     
 def plot_mean_losses(epochs, mean_train_loss, std_train_loss, mean_val_loss, std_val_loss, title= "Mean Loss vs Epochs"):
     x_axis = range(epochs)

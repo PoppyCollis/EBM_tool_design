@@ -14,7 +14,9 @@ from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 
 from tool_dataset import CustomDataset
-from helpers.plots import plot_losses, plot_mean_losses
+from helpers.plots import plot_mean_losses
+from config import RewardModelConfig
+
 
 
 class MLP(nn.Module):
@@ -118,15 +120,18 @@ def run_n_trials(num_trials, device, train_loader, test_loader, criterion, epoch
 
 def main():
     
-    batch_size = 32
-    epochs = 10
-    lr = 1e-3
+    batch_size = RewardModelConfig.BATCH_SIZE
+    epochs = RewardModelConfig.EPOCHS
+    lr = RewardModelConfig.LEARNING_RATE
     
-    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    device = RewardModelConfig.DEVICE
+    
     print('device:', device)
     
+    # --- LOAD IN DATASET, TRAIN-TEST SPLIT AND NORMALISE ---
+    
     # Read data
-    data_path = 'src/ebm_tool_designer/data/dummy_dataset.parquet'
+    data_path =  RewardModelConfig.DATA_PATH
     full_df = pd.read_parquet(data_path)
     
     # train test split 80%
@@ -158,14 +163,19 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     
-    reward_model = MLP()
+    # --- TRAIN REWARD MODEL OFFLINE ---
+    
+    hidden_features = RewardModelConfig.HIDDEN_FEATURES, 
+    out_features = RewardModelConfig.OUT_FEATURES
+    
+    reward_model = MLP(in_features=6, hidden_features=hidden_features, out_features=out_features)
     # Use Mean Squared Error loss for regression
     criterion = nn.MSELoss()
     # Adam is a good general purpose optimizer
     optimizer = torch.optim.Adam(reward_model.parameters(), lr = lr)
     
-    # Run 5 seeds of training sessions and look at the average train and val losses
-    num_trials = 5
+    # Run a number of seeds of training sessions and look at the average train and val losses
+    num_trials = RewardModelConfig.NUM_SEEDS
 
     mean_train_loss, mean_val_loss, std_train_loss, std_val_loss = run_n_trials(num_trials, device, train_loader, test_loader, criterion, epochs, lr)
     
@@ -173,8 +183,9 @@ def main():
     
     
     # --- SAVING ---
+    
     # Best practice: Save the model state, but also the optimizer state and metadata
-    save_path = "src/ebm_tool_designer/weights/reward_model_best.pt"
+    save_path = RewardModelConfig.WEIGHTS_SAVE_PATH
 
     torch.save({
          'epoch': epochs,

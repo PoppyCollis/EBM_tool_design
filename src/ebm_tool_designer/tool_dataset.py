@@ -12,6 +12,8 @@ import pandas as pd
 from helpers.plots import visualise_tools
 import torch
 from torch.utils.data import Dataset
+from config import ToolDatasetConfig
+
 
 class ToolDataset:
     def __init__(self, l1_range, l2_range, theta_range, reward_type = "mse"):
@@ -129,16 +131,19 @@ class CustomDataset(Dataset):
 
 def main():
     
-    save_file = 'src/ebm_tool_designer/data/dummy_dataset.parquet'
+    save_file = ToolDatasetConfig.SAVE_PATH
     
-    # Define ranges [Lower, Upper]
-    l1_range = (150,300)
-    l2_range = (150,300)
-    theta_range = (0,360)
+    # Get bounds from config file [Lower, Upper]
+    l1_bounds = ToolDatasetConfig.L1_BOUNDS 
+    l2_bounds = ToolDatasetConfig.L2_BOUNDS 
+    theta_bounds = ToolDatasetConfig.THETA_BOUNDS   
+    reward_type = ToolDatasetConfig.REWARD_TYPE
     
-    tool_dataset = ToolDataset(l1_range, l2_range, theta_range, reward_type="euclidean_distance")
+    
+    tool_dataset = ToolDataset(l1_bounds, l2_bounds, theta_bounds, reward_type)
 
-    num_designs = 1000
+    num_designs = ToolDatasetConfig.NUM_DESIGNS
+    
     # designs = tool_dataset.sample_design(num_designs)
     # visualise_tools(designs)
     # print(designs)
