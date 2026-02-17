@@ -14,3 +14,14 @@ class ToolDesignPrior:
         theta = np.random.uniform(self.theta_bounds[0], self.theta_bounds[1], n_samples)
 
         return l1,l2, theta
+    
+    
+    def transform_to_unconstrained(params, bounds):
+        # transform bounds into unconstrained space via reparameterisation into phi
+        # [0,1] to Sigmoid
+        pass
+    
+    def transform_to_physical(phi, bounds):
+        # transform Phi back to original parameter space
+        # Sigmoid back to [0, 1]
+        pass

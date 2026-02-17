@@ -31,6 +31,7 @@ class EnergyBasedModel:
         # load the pre-trained weights into the model
         checkpoint = torch.load(weights_path)
         reward_model.load_state_dict(checkpoint['model_state_dict'])
+        # also need to load in normalisation stats for features
         reward_model.eval()
         reward_model.to(self.device)
         return reward_model
@@ -43,61 +44,119 @@ class EnergyBasedModel:
         
         x = torch.cat([l1, l2, si, co, c_target], dim=-1)
         
+        # 3. Apply the same normalization used during training
+        # x = (x - self.feature_stats['mean']) / self.feature_stats['std']
+        
         cond_energy = self.reward_model.energy(x, r_target)
         
         prior_energy = 0.0
         
         return cond_energy + prior_energy
-
-    def langevin_dynamics(self, c_target, r_target, batch_size=32):
-        # 1. Initialize tool params, tau, from the prior (e.g., [batch_size, 4])
-        # Assume tau is [l1, l2, sin, cos] 
-        # also should only optimise theta not sin(theta)+cos(theta)
+    
+    def transform_to_unconstrained_space(self, tau):
+        """ Physical [low, high] -> Unconstrained space (-inf, inf)"""
+        bounds_low = torch.tensor([self.prior.l1_bounds[0], self.prior.l2_bounds[0], self.prior.theta_bounds[0]]).to(self.device)
+        bounds_high = torch.tensor([self.prior.l1_bounds[1], self.prior.l2_bounds[1], self.prior.theta_bounds[1]]).to(self.device)
+        # Normalize to [0, 1]
+        p_norm = (tau - bounds_low) / (bounds_high - bounds_low)
+        # Apply Logit: log(p / (1-p))
+        # We add a tiny epsilon to prevent log(0)
+        eps = 1e-6
+        p_norm = torch.clamp(p_norm, eps, 1.0 - eps)
+        phi = torch.log(p_norm / (1.0 - p_norm))
+        return phi
+    
+    def transform_to_physical_space(self, phi):
+        """Unconstrained (-inf, inf) -> Physical [low, high]"""
+        bounds_low = torch.tensor([self.prior.l1_bounds[0], self.prior.l2_bounds[0], self.prior.theta_bounds[0]]).to(self.device)
+        bounds_high = torch.tensor([self.prior.l1_bounds[1], self.prior.l2_bounds[1], self.prior.theta_bounds[1]]).to(self.device)
+        s = torch.sigmoid(phi)
+        tau = self.bounds_low + (bounds_high - bounds_low) * s
         
-        # Initial samples from your Prior (l1, l2, theta only)
+        # Calculate Log-Jacobian: log|d_tau / d_phi|
+        # This is required for MALA to stay mathematically 'correct'
+        log_det = torch.log(bounds_high - bounds_low) + \
+                torch.log(s + 1e-6) + torch.log(1.0 - s + 1e-6)
+        
+        return tau, log_det.sum(dim=-1)
+
+    def langevin_dynamics(self, c_target, r_target, batch_size=32, mc_corrected=False):
+        
+        # Logic:
+        
+        # 1. sample from tool design prior (uniform distributions)
+        # 2. immediately reparametrise into phi space
+        # 3. calculate the gradient of the energy with respect to phi.
+        # LD "proposal" step: to move phi_t -> phi_t+1.
+        #  Convert \phi_t+1 back to tau_t+1 to calculate the Metropolis-Hastings acceptance ratio.
+        
+        # 1. INITIALISE tool params, tau, by sampling from the prior (e.g., [batch_size, 4])
+        
         l1_init,l2_init,theta_init = self.prior.sample(batch_size)
         
-        tau = torch.cat([torch.tensor(l1_init).unsqueeze(1), 
-                     torch.tensor(l2_init).unsqueeze(1),
-                     torch.tensor(theta_init).unsqueeze(1)], dim=-1).to(self.device)
-        tau.requires_grad_(True)
-        
+        tau = torch.stack([l1_init, l2_init, theta_init], dim=-1).to(self.device).requires_grad_(True)
         
         c_target = c_target.to(self.device).detach()
-
-        for t in range(self.n_sampling_steps):
-            # 2. Slice tau to get individual components for
-            # the Energy logic (which works on theta not sin(theta))
-            l1 = tau[:, 0:1]
-            l2 = tau[:, 1:2]
-            theta = tau[:, 2:3]
         
-            E = self.joint_energy(l1, l2, theta, c_target, r_target)
-            E.sum().backward()
+        # 2. TRANSFORM tau by converting into unconstrained space (phi) using sigmoid
+        
+        phi = self.transform_to_unconstrained_space(tau)
+
+        for i in range(self.n_sampling_steps):
             
-            with torch.no_grad():
-                epsilon = torch.randn_like(tau) * np.sqrt(self.eta) # noise term
-                tau -= (self.eta / 2) * tau.grad + epsilon
+            # 3. ENERGY CALCULATION
+        
+            # Convert phi back to physical tau inside the gradient tape
+            current_tau, log_jacob = self.transform_to_physical_space(phi)
+            
+            # Calculate energy using your existing joint_energy logic
+            # slice tau to get individual components for the Energy logic (which works on theta not sin(theta))
+            l1_current = current_tau[:, 0:1]
+            l2_current = current_tau[:, 1:2]
+            theta_current = current_tau[:, 2:3]
+            
+            energy = self.joint_energy(l1_current,l2_current,theta_current, c_target, r_target)
+            
+            # Total MALA Energy = Physical Energy - Log Determinant
+            total_E = energy.sum() - log_jacob.sum()
+            
+            # 4. GRADIENT STEP
+            grad = torch.autograd.grad(total_E, phi)[0]
+            
+            # 5. PROPOSAL (Langevin Step)
+            noise = torch.randn_like(phi)
+            phi_prop = phi - self.eta * grad + torch.sqrt(torch.tensor(2 * self.eta)) * noise
+            
+            # can perform Metropolis-Hastings Accept/Reject step here
+            if mc_corrected:
+                pass
+            
+            phi = phi_prop.detach().requires_grad_(True)
+
+        # 6. FINAL OUTPUT: Convert the last phi back to physical tau
+        with torch.no_grad():
+            final_tau, _ = self.transform_to_physical_space(phi)
+            
+        return final_tau
                 
-                # Projection/Clipping: Keep l1 and l2 within physical bounds?
-            
-            tau.grad.zero_()
-            
-        return tau.detach()
 
 prior = ToolDesignPrior(ToolDatasetConfig.L1_BOUNDS, ToolDatasetConfig.L2_BOUNDS, ToolDatasetConfig.THETA_BOUNDS)
         
 ebm = EnergyBasedModel(prior, weights_path=RewardModelConfig.WEIGHTS_SAVE_PATH)
     
-print(ebm)
+
+
+# tests: 
+# 1. get two tool vectors and work out the joint energy of each
+# 2. check energy is higher when reward pred is further from target
+# 3. 
 
 
 # CONSIDERATIONS:
 
-# what doe the log uniform prior look like in the joint energy, it is not gaussian
+# The $\sin(\theta)^2 + \cos(\theta)^2 = 1$ Constraint. sample 3: $(l_1, l_2, \theta)$, This guarantees the angle is always valid.
 
-# is langevin noise always gaussian or does it depend on the prior?
+# the reward model was trained on normalised data: apply feature_stats to tau and c inside the joint energy function - 
+# If your reward model was trained on normalized data, you should be performing Langevin in the normalized space.
 
-# The $\sin(\theta)^2 + \cos(\theta)^2 = 1$ Constraint. sample 3: $(l_1, l_2, \theta)$, This guarantees the angle is always valid. But does it struggle with the wrap around problem
-
-# Normalization Alignment: the reward model was trained on normalised data: apply feature_stats to tau and c inside the joint energy function
+# MALA combines Langevin Dynamics with a Metropolis-Hastings acceptance step. 

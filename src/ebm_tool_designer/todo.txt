@@ -5,4 +5,9 @@ TO DO
 
 2. Get EBM working and LD sampling
 
+Note that there is an issue with taking the gradient of a uniform prior in the energy function. Here, we must reparameterise into an unconstrained space 
+before calculating the energy and then coverting back. e.g. partial deriv E w.r.t. phi not tau.
+
+We can also implement metropolis hastings corrections to improve convergence. If you skip the MH step, this is technically "Unadjusted Langevin" in phi-space
+
 3. Look into integrating into Matteos codebase via collecting an offline dataset
