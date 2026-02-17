@@ -5,11 +5,10 @@ import numpy as np
 from reward_model import MLP
 import torch
 from tool_design_prior import ToolDesignPrior
-from config import ToolDatasetConfig, EBMConfig
-
+from config import ToolDatasetConfig, EBMConfig, RewardModelConfig
     
-class EnergyBasedModel:    
-    def __init__(self, prior, device, weights_path):
+class EnergyBasedModel:
+    def __init__(self, prior, weights_path):
         """
         Initializes the EBM with a prior and a reward model.
         
@@ -17,73 +16,88 @@ class EnergyBasedModel:
             prior (ToolDesignPrior): The unconditioned prior over tool designs.
             weights_path (str): Path to the pre-trained reward model weights.
         """
-        self.device = device
-        self.criterion = torch.nn.MSELoss()
+        self.device = RewardModelConfig.DEVICE
         self.prior = prior
-        # load in pre-trained reward model weights
-        self.reward_model = self.load_reward_model(weights_path)
-        self.sigma = EBMConfig.SIGMA
-        
+        self.reward_model = self.load_reward_model(weights_path) # load in pretrained weights
+        self.n_sampling_steps = EBMConfig.N_SAMPLING_STEPS
+        self.eta = EBMConfig.ETA
         
     def load_reward_model(self, weights_path):
         # load in architecture (must match one used for pre-trained model weights)
-        reward_model = MLP() 
-        
+        reward_model = MLP(
+            in_features=RewardModelConfig.IN_FEATURES, 
+            hidden_features=RewardModelConfig.HIDDEN_FEATURES, 
+            out_features=RewardModelConfig.OUT_FEATURES) 
         # load the pre-trained weights into the model
         checkpoint = torch.load(weights_path)
         reward_model.load_state_dict(checkpoint['model_state_dict'])
         reward_model.eval()
         reward_model.to(self.device)
-        
         return reward_model
     
-    def reward_prediction_error(self, tool_description, target_location, reward_target):
-        with torch.no_grad(): 
-            rpes = []
-            for features, labels in tool_description:
-                features = features.to(self.device)
-                reward_target = reward_target.to(self.device)
-                preds = self.reward_model(features)
-                loss = self.criterion(preds, reward_target)
-                rpes.append(loss.item())
-        return rpes
-            
-
-    def energy(self, tool_description, target_location, reward_target):
-        """
-        Calculates the energy for a given set of designs and task.
-        """        
-        E = np.inv(2 * self.sigma**2)* self.reward_prediction_error(self, tool_description, reward_target)
-        E = E # + np.log(prior)
-        return E
-    
-
-    def sample(self, target_location, n_samples=1, method='langevin'):
-        """
-        Samples from the EBM distribution p(τ | c) ∝ exp(-E(τ, c)).
-        """
-        if method == 'langevin':
-            pass
-        elif method == "MCMC":
-            pass
-        else:
-            raise NotImplementedError("Sampling method not supported.")
+    def joint_energy(self, l1, l2, theta, c_target, r_target):
+        # current sample, \tau, c, reward target
+        # conditional energy + prior energy [batch_size, 6]
+        si = torch.sin(theta)
+        co = torch.cos(theta)
         
+        x = torch.cat([l1, l2, si, co, c_target], dim=-1)
+        
+        cond_energy = self.reward_model.energy(x, r_target)
+        
+        prior_energy = 0.0
+        
+        return cond_energy + prior_energy
 
-def main():
-    
-    weights_path = ToolDatasetConfig.WEIGHTS_SAVE_PATH
-    
-    # Define ranges [Lower, Upper]
-    l1_bounds = ToolDatasetConfig.L1_BOUNDS
-    l2_bounds = ToolDatasetConfig.L2_BOUNDS
-    theta_bounds = ToolDatasetConfig.THETA_BOUNDS
+    def langevin_dynamics(self, c_target, r_target, batch_size=32):
+        # 1. Initialize tool params, tau, from the prior (e.g., [batch_size, 4])
+        # Assume tau is [l1, l2, sin, cos] 
+        # also should only optimise theta not sin(theta)+cos(theta)
+        
+        # Initial samples from your Prior (l1, l2, theta only)
+        l1_init,l2_init,theta_init = self.prior.sample(batch_size)
+        
+        tau = torch.cat([torch.tensor(l1_init).unsqueeze(1), 
+                     torch.tensor(l2_init).unsqueeze(1),
+                     torch.tensor(theta_init).unsqueeze(1)], dim=-1).to(self.device)
+        tau.requires_grad_(True)
+        
+        
+        c_target = c_target.to(self.device).detach()
 
-    prior = ToolDesignPrior(l1_bounds, l2_bounds, theta_bounds)
-    
-    device = EBMConfig.DEVICE
-    
-    ebm = EnergyBasedModel(prior, device, weights_path=weights_path)
+        for t in range(self.n_sampling_steps):
+            # 2. Slice tau to get individual components for
+            # the Energy logic (which works on theta not sin(theta))
+            l1 = tau[:, 0:1]
+            l2 = tau[:, 1:2]
+            theta = tau[:, 2:3]
+        
+            E = self.joint_energy(l1, l2, theta, c_target, r_target)
+            E.sum().backward()
+            
+            with torch.no_grad():
+                epsilon = torch.randn_like(tau) * np.sqrt(self.eta) # noise term
+                tau -= (self.eta / 2) * tau.grad + epsilon
+                
+                # Projection/Clipping: Keep l1 and l2 within physical bounds?
+            
+            tau.grad.zero_()
+            
+        return tau.detach()
 
-if __name__ == "__main__":
-    main()
+prior = ToolDesignPrior(ToolDatasetConfig.L1_BOUNDS, ToolDatasetConfig.L2_BOUNDS, ToolDatasetConfig.THETA_BOUNDS)
+        
+ebm = EnergyBasedModel(prior, weights_path=RewardModelConfig.WEIGHTS_SAVE_PATH)
+    
+print(ebm)
+
+
+# CONSIDERATIONS:
+
+# what doe the log uniform prior look like in the joint energy, it is not gaussian
+
+# is langevin noise always gaussian or does it depend on the prior?
+
+# The $\sin(\theta)^2 + \cos(\theta)^2 = 1$ Constraint. sample 3: $(l_1, l_2, \theta)$, This guarantees the angle is always valid. But does it struggle with the wrap around problem
+
+# Normalization Alignment: the reward model was trained on normalised data: apply feature_stats to tau and c inside the joint energy function

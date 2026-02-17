@@ -27,11 +27,14 @@ class RewardModelConfig:
     DATA_PATH = 'src/ebm_tool_designer/data/dummy_dataset.parquet'
     WEIGHTS_SAVE_PATH = 'src/ebm_tool_designer/weights/reward_model_best.pt'
     
+    IN_FEATURES = 6
     HIDDEN_FEATURES = 128
     OUT_FEATURES = 64
     LEARNING_RATE = 1e-3
     BATCH_SIZE = 32
     EPOCHS = 10
+    
+    SIGMA = 0.01 # 0.01 after normalizing all the continuous attributes to [0, 1]
     
     
 class EBMConfig:
@@ -40,4 +43,7 @@ class EBMConfig:
     SIGMA = 0.01
     SAMPLING_METHOD = 'langevin'
     N_SAMPLES = 100
+    N_SAMPLING_STEPS = 1000
+    ETA = 0.01
+    
 

@@ -37,6 +37,7 @@ class MLP(nn.Module):
         )
         # Apply the weight initialization
         self.apply(self._init_weights)
+        self.sigma = RewardModelConfig.SIGMA
     
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
@@ -47,6 +48,15 @@ class MLP(nn.Module):
         
     def forward(self, x):
         return self.net(x)
+    
+    def energy(self,x, r_target):
+        """
+        Computes the conditional energy for a specific target reward value and input x
+        input,x, includes tool design params tau and task description c.
+        """
+        r_pred = self.forward(x)
+        E = 1/(2* (self.sigma**2)) * (r_target - r_pred)**2
+        return E
     
     
 def train_model(device, reward_model, train_loader, test_loader, optimizer, criterion, epochs):
@@ -165,10 +175,7 @@ def main():
     
     # --- TRAIN REWARD MODEL OFFLINE ---
     
-    hidden_features = RewardModelConfig.HIDDEN_FEATURES, 
-    out_features = RewardModelConfig.OUT_FEATURES
-    
-    reward_model = MLP(in_features=6, hidden_features=hidden_features, out_features=out_features)
+    reward_model = MLP(in_features= RewardModelConfig.IN_FEATURES, hidden_features=RewardModelConfig.HIDDEN_FEATURES, out_features=RewardModelConfig.OUT_FEATURES)
     # Use Mean Squared Error loss for regression
     criterion = nn.MSELoss()
     # Adam is a good general purpose optimizer
@@ -197,3 +204,5 @@ def main():
 
 if __name__ == "__main__":
     main()    
+    
+    

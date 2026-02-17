@@ -12,9 +12,5 @@ class ToolDesignPrior:
         l1 = np.random.uniform(self.l1_bounds[0], self.l1_bounds[1], n_samples)
         l2 = np.random.uniform(self.l2_bounds[0], self.l2_bounds[1], n_samples)
         theta = np.random.uniform(self.theta_bounds[0], self.theta_bounds[1], n_samples)
-        
-        # 1. Pre-calculate sin/cos 
-        sin_theta = np.sin(theta)
-        cos_theta = np.cos(theta)
-        
-        return l1,l2,sin_theta,cos_theta
+
+        return l1,l2, theta

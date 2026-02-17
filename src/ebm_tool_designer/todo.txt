@@ -1,0 +1,8 @@
+TO DO
+
+
+1. Make a separate file for training the reward model called train_reward_model.py, rather than training being in the main func of reward_model.py
+
+2. Get EBM working and LD sampling
+
+3. Look into integrating into Matteos codebase via collecting an offline dataset

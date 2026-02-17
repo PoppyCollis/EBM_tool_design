@@ -155,4 +155,4 @@ def main():
     
 
 if __name__ == "__main__":
-    main()    # need to define an arbitrary dummy reward to train the reward predictor with.
+    main()   
