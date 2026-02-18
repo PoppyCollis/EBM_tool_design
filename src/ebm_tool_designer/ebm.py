@@ -78,27 +78,34 @@ class EnergyBasedModel:
         c_target = c_target.detach()
         r_target = r_target.detach()
 
-        # 3. optimise in phi space
-        optimizer = torch.optim.Adam([phi], lr=self.eta)
+        # 3. optimise in phi space 
+        #optimizer = torch.optim.Adam([phi], lr=self.eta)
         
+        energy_hist = []
         for i in range(self.n_sampling_steps):
             
-            optimizer.zero_grad() 
-        
-            tau_current = prior.transform_to_tau(phi) # re-derive tau from phi inside the loop.
-
-            energy = self.joint_energy(tau_current, c_target, r_target)
-        
-            # backprop
+            if phi.grad is not None:
+                phi.grad.zero_()
+                
+            tau_current = prior.transform_to_tau(phi)
+            
+            sigmoid_phi = torch.sigmoid(phi)
+            log_det_jacobian = torch.log((self.prior.bounds_high - self.prior.bounds_low) * sigmoid_phi * (1 - sigmoid_phi) + 1e-8).sum()
+            energy = self.joint_energy(tau_current, c_target, r_target) - log_det_jacobian
+                
             energy.backward()
-        
-            optimizer.step()
+            
+            with torch.no_grad():
+                energy_hist.append(energy.item())
+                
+                noise = torch.randn_like(phi) * torch.sqrt(torch.tensor(2.0 * self.eta))
+                phi -= self.eta * phi.grad + noise
             
         tau_final = tau_current
         
         print("final tau:", tau_final.cpu().detach().numpy())
         
-        return tau_final
+        return tau_final, energy_hist
         
 device = EBMConfig.DEVICE
 
@@ -123,12 +130,20 @@ r_target = torch.tensor([-50.0], device=device) # whats an appropriate reward?
 
 print(f"Target location: {c_target.cpu().detach().numpy()}, Reward target: {r_target.item()}")
 
-tool_sample = ebm.langevin_dynamics(c_target, r_target, batch_size=1)
+tool_sample, energy_hist = ebm.langevin_dynamics(c_target, r_target, batch_size=1)
+
+
+import matplotlib.pyplot as plt
+
+plt.plot(energy_hist)
+plt.show()
+
+
 
 # todo:
-# add langevin noise kick
-# add MH correction
-# check energy is decreasing and converging
+# add log det of jacobian to overleaf
+# add MH correction?
+# optimise lr and iter size, check energy is decreasing and converging
 # check predicted reward of final tool is close to reward 
 
 # plot the tool sample and visualise w.r.t. target location and show reward!

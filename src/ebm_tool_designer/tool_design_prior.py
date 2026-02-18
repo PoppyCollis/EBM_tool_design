@@ -29,7 +29,7 @@ class ToolDesignPrior:
         # Step 1: Normalize to [0, 1]
         u = (tau - self.bounds_low) / (self.bounds_high - self.bounds_low)
         # add a tiny epsilon to prevent log(0)
-        eps = 1e-6
+        eps = 1e-8
         u = torch.clamp(u, eps, 1.0 - eps)
         # transform to between (-\infty, + \infty)
         phi = torch.logit(u).detach().requires_grad_(True)
