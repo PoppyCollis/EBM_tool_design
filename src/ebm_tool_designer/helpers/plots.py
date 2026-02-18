@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
     
-def visualise_tools(designs):
+def visualise_tools(designs, target_location=None):
     n_samples = len(designs["l1"])
     
     # We need to store the actual (x, y) points to determine the plot bounds
@@ -33,6 +33,7 @@ def visualise_tools(designs):
     axes = axes.flatten()
 
     for i in range(n_samples):
+        
         p1, p2, p3 = all_joint_positions[i]
         ax = axes[i]
         
@@ -42,6 +43,11 @@ def visualise_tools(designs):
         
         ax.plot(xs, ys, '-o', lw=4, markersize=2, color='#2c3e50')
         
+        if target_location.any() is not None:
+            x = target_location.flatten()[0]
+            y = target_location.flatten()[1]
+            ax.scatter(x, y, color='red', s=100, label='Target Location', zorder=5)
+                
         # Consistent scaling across all subplots
         ax.set_title(f"θ: {np.degrees(designs['theta'][i]):.1f}°\nl1: {designs['l1'][i]:.1f}\nl2: {designs['l2'][i]:.1f}")
         ax.set_xlim(-max_val, max_val)
@@ -49,10 +55,11 @@ def visualise_tools(designs):
         ax.set_aspect('equal')
         ax.grid(True, linestyle='--', alpha=0.6)
 
+        
     # Hide unused axes
     for j in range(i + 1, len(axes)):
         axes[j].axis('off')
-
+    plt.legend()
     plt.show()
     
     
@@ -86,4 +93,11 @@ def plot_mean_losses(epochs, mean_train_loss, std_train_loss, mean_val_loss, std
     plt.ylabel('Loss')
     plt.xlabel('epoch')
     plt.title(title)
+    plt.show()
+    
+    
+def plot_energy_hist(energy_hist):
+    e = np.array(energy_hist)
+    std = np.std(e)
+    plt.errorbar(np.arange(len(e)), e, yerr=std)
     plt.show()

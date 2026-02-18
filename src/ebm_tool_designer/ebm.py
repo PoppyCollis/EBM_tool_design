@@ -6,6 +6,7 @@ from reward_model import MLP
 import torch
 from tool_design_prior import ToolDesignPrior
 from config import ToolDatasetConfig, EBMConfig, RewardModelConfig
+from helpers.plots import plot_energy_hist, visualise_tools 
     
 class EnergyBasedModel:
     def __init__(self, prior, weights_path):
@@ -63,13 +64,13 @@ class EnergyBasedModel:
         
         return cond_energy + prior_energy
     
-    def langevin_dynamics(self, c_target, r_target, batch_size=32):
+    def langevin_dynamics(self, c_target, r_target, batch_size):
         
         # NEED TO ADD NOISE KICK TO LANGEVIN, AND MAYBE METROPOLIS-HASTINGS CORRECTED SAMPLING?
         
         # 1. start with a sample in tau space
         tau = self.prior.sample(batch_size)
-        print(" initial tau:", tau.cpu().detach().numpy())
+        #print(" initial tau:", tau.cpu().detach().numpy())
 
         # 2. translate to phi space
         # 2. translate to phi space
@@ -93,23 +94,21 @@ class EnergyBasedModel:
             log_det_jacobian = torch.log((self.prior.bounds_high - self.prior.bounds_low) * sigmoid_phi * (1 - sigmoid_phi) + 1e-8).sum()
             energy = self.joint_energy(tau_current, c_target, r_target) - log_det_jacobian
                 
-            energy.backward()
+            energy.sum().backward()
             
             with torch.no_grad():
-                energy_hist.append(energy.item())
+                energy_hist.append(energy.sum().item())
                 
                 noise = torch.randn_like(phi) * torch.sqrt(torch.tensor(2.0 * self.eta))
-                phi -= self.eta * phi.grad + noise
+                phi -= (self.eta/2) * phi.grad + noise
             
         tau_final = tau_current
         
-        print("final tau:", tau_final.cpu().detach().numpy())
+        #print("final tau:", tau_final.cpu().detach().numpy())
         
         return tau_final, energy_hist
         
 device = EBMConfig.DEVICE
-
-n_samples = 1
 
 prior = ToolDesignPrior(ToolDatasetConfig.L1_BOUNDS, ToolDatasetConfig.L2_BOUNDS, ToolDatasetConfig.THETA_BOUNDS, ToolDatasetConfig.DEVICE)
         
@@ -117,30 +116,41 @@ ebm = EnergyBasedModel(prior, weights_path=RewardModelConfig.WEIGHTS_SAVE_PATH)
 
 
 # sample a random target location and set a reward target
+n_samples = EBMConfig.N_SAMPLES # For example
 
 max_radius = prior.bounds_high[0] + prior.bounds_high[1]
-theta = torch.rand(n_samples, device=device) * 2 * np.pi
-r = max_radius * torch.sqrt(torch.rand(n_samples, device=device))
+theta = torch.rand(1, device=device) * 2 * np.pi
+r = max_radius * torch.sqrt(torch.rand(1, device=device))
 x = r * torch.cos(theta)
 y = r * torch.sin(theta)
 # Combine into a single tensor of shape (n_samples, 2)
-c_target = torch.stack([x, y], dim=-1)
+single_c_target = torch.stack([x, y], dim=-1)
 
-r_target = torch.tensor([-50.0], device=device) # whats an appropriate reward?
+single_r_target = torch.tensor([0.0], device=device) # whats an appropriate reward?
 
-print(f"Target location: {c_target.cpu().detach().numpy()}, Reward target: {r_target.item()}")
+print(f"Target location: {single_c_target.cpu().detach().numpy()}, Reward target: {single_r_target.item()}")
 
-tool_sample, energy_hist = ebm.langevin_dynamics(c_target, r_target, batch_size=1)
+# Expand it to [n_samples, 2]
+c_target = single_c_target.expand(n_samples, 2)
+r_target = single_r_target.expand(n_samples)
+
+tool_sample, energy_hist = ebm.langevin_dynamics(c_target, r_target, batch_size=n_samples)
+
+designs = {}
+designs['l1'] = tool_sample[:, 0].cpu().detach().numpy()
+designs['l2'] = tool_sample[:, 1].cpu().detach().numpy()
+designs['theta'] = tool_sample[:, 2].cpu().detach().numpy()
 
 
-import matplotlib.pyplot as plt
+plot_energy_hist(energy_hist)
 
-plt.plot(energy_hist)
-plt.show()
+if n_samples < 25:
+    visualise_tools(designs, target_location=single_c_target.cpu().detach().numpy())
 
 
 
 # todo:
+# make it work for batch
 # add log det of jacobian to overleaf
 # add MH correction?
 # optimise lr and iter size, check energy is decreasing and converging

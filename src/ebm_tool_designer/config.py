@@ -45,7 +45,7 @@ class EBMConfig:
     DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     SIGMA = 1e-2
     SAMPLING_METHOD = 'langevin'
-    N_SAMPLES = 100
-    N_SAMPLING_STEPS = 100
+    N_SAMPLES = 10
+    N_SAMPLING_STEPS = 50
     ETA = 1e-4
 
