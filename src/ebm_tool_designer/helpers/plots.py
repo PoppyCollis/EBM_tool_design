@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
     
-def visualise_tools(designs, target_location=None):
+def visualise_tools(designs, target_location=None, energies=None):
     n_samples = len(designs["l1"])
     
     # We need to store the actual (x, y) points to determine the plot bounds
@@ -34,9 +34,10 @@ def visualise_tools(designs, target_location=None):
 
     for i in range(n_samples):
         
+        
         p1, p2, p3 = all_joint_positions[i]
         ax = axes[i]
-        
+                
         # Extract x and y lists for plotting
         xs = [p1[0], p2[0], p3[0]]
         ys = [p1[1], p2[1], p3[1]]
@@ -49,7 +50,10 @@ def visualise_tools(designs, target_location=None):
             ax.scatter(x, y, color='red', s=100, label='Target Location', zorder=5)
                 
         # Consistent scaling across all subplots
-        ax.set_title(f"θ: {np.degrees(designs['theta'][i]):.1f}°\nl1: {designs['l1'][i]:.1f}\nl2: {designs['l2'][i]:.1f}")
+        if energies is not None:
+            ax.set_title(f"θ: {np.degrees(designs['theta'][i]):.1f}°\nl1: {designs['l1'][i]:.1f}\nl2: {designs['l2'][i]:.1f}\n Energy: {energies[i]:.4f}")
+        else:   
+            ax.set_title(f"θ: {np.degrees(designs['theta'][i]):.1f}°\nl1: {designs['l1'][i]:.1f}\nl2: {designs['l2'][i]:.1f}")
         ax.set_xlim(-max_val, max_val)
         ax.set_ylim(-max_val, max_val) 
         ax.set_aspect('equal')
@@ -59,7 +63,7 @@ def visualise_tools(designs, target_location=None):
     # Hide unused axes
     for j in range(i + 1, len(axes)):
         axes[j].axis('off')
-    plt.legend()
+    plt.tight_layout()
     plt.show()
     
     
@@ -99,5 +103,15 @@ def plot_mean_losses(epochs, mean_train_loss, std_train_loss, mean_val_loss, std
 def plot_energy_hist(energy_hist):
     e = np.array(energy_hist)
     std = np.std(e)
-    plt.errorbar(np.arange(len(e)), e, yerr=std)
+    x = np.arange(len(e))
+    
+    # Plot the main line
+    plt.plot(x, e, color='blue', label='Energy')
+    
+    # Create the shaded error region
+    plt.fill_between(x, e - std, e + std, color='blue', alpha=0.2, lw=0)
+    
+    plt.xlabel('Iteration')
+    plt.ylabel('Energy')
+    plt.legend()
     plt.show()

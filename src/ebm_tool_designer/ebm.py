@@ -56,7 +56,7 @@ class EnergyBasedModel:
         x = (x - self.feature_stats['mean']) / self.feature_stats['std']
         
         # also normalise the reward
-        r_target = (r_target - self.label_stats['mean']) / self.label_stats['std']
+        #r_target = (r_target - self.label_stats['mean']) / self.label_stats['std']
 
         cond_energy = self.reward_model.energy(x, r_target)
         
@@ -81,6 +81,7 @@ class EnergyBasedModel:
 
         # 3. optimise in phi space 
         #optimizer = torch.optim.Adam([phi], lr=self.eta)
+        noise_std = np.sqrt(2.0 * self.eta)
         
         energy_hist = []
         for i in range(self.n_sampling_steps):
@@ -92,14 +93,23 @@ class EnergyBasedModel:
             
             sigmoid_phi = torch.sigmoid(phi)
             log_det_jacobian = torch.log((self.prior.bounds_high - self.prior.bounds_low) * sigmoid_phi * (1 - sigmoid_phi) + 1e-8).sum()
-            energy = self.joint_energy(tau_current, c_target, r_target) - log_det_jacobian
+            energy = 1e-5 * self.joint_energy(tau_current, c_target, r_target) - log_det_jacobian
+            
+            # Check the magnitude of the two forces
+            if i ==0:
+                grad_energy = torch.autograd.grad(self.joint_energy(tau_current, c_target, r_target).sum(), phi, retain_graph=True)[0]
+                grad_jacobian = torch.autograd.grad(log_det_jacobian.sum(), phi, retain_graph=True)[0]
+
+                print(f"Energy Grad Mean Abs: {grad_energy.abs().mean().item()}")
+                print(f"Jacobian Grad Mean Abs: {grad_jacobian.abs().mean().item()}")
+                            
                 
             energy.sum().backward()
             
             with torch.no_grad():
                 energy_hist.append(energy.sum().item())
                 
-                noise = torch.randn_like(phi) * torch.sqrt(torch.tensor(2.0 * self.eta))
+                noise = torch.randn_like(phi) * noise_std
                 phi -= (self.eta/2) * phi.grad + noise
             
         tau_final = tau_current
@@ -119,10 +129,11 @@ ebm = EnergyBasedModel(prior, weights_path=RewardModelConfig.WEIGHTS_SAVE_PATH)
 n_samples = EBMConfig.N_SAMPLES # For example
 
 max_radius = prior.bounds_high[0] + prior.bounds_high[1]
-theta = torch.rand(1, device=device) * 2 * np.pi
+theta = torch.rand(1, device=device) * np.pi # always positive y coordinate # torch.rand(1, device=device) * 2 * np.pi
 r = max_radius * torch.sqrt(torch.rand(1, device=device))
 x = r * torch.cos(theta)
 y = r * torch.sin(theta)
+
 # Combine into a single tensor of shape (n_samples, 2)
 single_c_target = torch.stack([x, y], dim=-1)
 
@@ -135,6 +146,13 @@ c_target = single_c_target.expand(n_samples, 2)
 r_target = single_r_target.expand(n_samples)
 
 tool_sample, energy_hist = ebm.langevin_dynamics(c_target, r_target, batch_size=n_samples)
+# tool_sample = tool_sample.cpu().detach().numpy()
+
+# print("tools:", tool_sample)
+
+
+# get final energies (dont sum)
+final_tool_energies = ebm.joint_energy(tool_sample, c_target, r_target).view(n_samples, -1).sum(dim=1)
 
 designs = {}
 designs['l1'] = tool_sample[:, 0].cpu().detach().numpy()
@@ -144,14 +162,19 @@ designs['theta'] = tool_sample[:, 2].cpu().detach().numpy()
 
 plot_energy_hist(energy_hist)
 
+energy_per_tool = final_tool_energies.cpu().detach().numpy().flatten()
+
+print("energies", energy_per_tool)
+print("tools", tool_sample.cpu().detach().numpy())
+
 if n_samples < 25:
-    visualise_tools(designs, target_location=single_c_target.cpu().detach().numpy())
+    visualise_tools(designs, target_location=single_c_target.cpu().detach().numpy(), energies = energy_per_tool)
 
-
+# I want to plot the energies of each tool alongside 
 
 # todo:
 # make it work for batch
-# add log det of jacobian to overleaf
+# add log det of jacobian to overleafx
 # add MH correction?
 # optimise lr and iter size, check energy is decreasing and converging
 # check predicted reward of final tool is close to reward 
