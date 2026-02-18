@@ -142,14 +142,15 @@ def main():
     
     tool_dataset = ToolDataset(l1_bounds, l2_bounds, theta_bounds, reward_type)
 
-    num_designs = 9 #ToolDatasetConfig.NUM_DESIGNS
+    num_designs = 200 #ToolDatasetConfig.NUM_DESIGNS
     
     designs = tool_dataset.sample_design(num_designs)
-    visualise_tools(designs)
+    # visualise_tools(designs)
     # print(designs)
-    # data = tool_dataset.sample_dataset(num_designs)
+    data = tool_dataset.sample_dataset(num_designs)
 
-    # df = pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    print(df["reward"].max())
     # df.to_parquet(save_file)
     
     

@@ -64,9 +64,9 @@ def main():
     optimizer = torch.optim.SGD([phi], lr=1e-2) # will likely need Adam for a more complex energy function than this dummy one
 
     for i in range(10):
-        optimizer.zero_grad() # Crucial: Clear old gradients!
+        optimizer.zero_grad() 
         
-        tau_current = prior.transform_to_tau(phi)
+        tau_current = prior.transform_to_tau(phi) # re-derive tau from phi inside the loop.
 
         energy = torch.sum(tau_current ** 2) # dummy energy function
         

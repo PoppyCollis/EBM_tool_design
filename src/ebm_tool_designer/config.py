@@ -47,6 +47,5 @@ class EBMConfig:
     SAMPLING_METHOD = 'langevin'
     N_SAMPLES = 100
     N_SAMPLING_STEPS = 1000
-    ETA = 0.01
-    
+    ETA = 1e-3
 
