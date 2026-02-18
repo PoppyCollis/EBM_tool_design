@@ -22,6 +22,9 @@ class EnergyBasedModel:
         self.n_sampling_steps = EBMConfig.N_SAMPLING_STEPS
         self.eta = EBMConfig.ETA
         
+        self.bounds_low = torch.tensor([self.prior.l1_bounds[0], self.prior.l2_bounds[0], self.prior.theta_bounds[0]]).to(self.device)
+        self.bounds_high = torch.tensor([self.prior.l1_bounds[1], self.prior.l2_bounds[1], self.prior.theta_bounds[1]]).to(self.device)
+        
     def load_reward_model(self, weights_path):
         # load in architecture (must match one used for pre-trained model weights)
         reward_model = MLP(
@@ -36,7 +39,7 @@ class EnergyBasedModel:
         reward_model.to(self.device)
         return reward_model
     
-    def joint_energy(self, l1, l2, theta, c_target, r_target):
+    def joint_energy(self, l1, l2, theta, log_jacob, c_target, r_target):
         # current sample, \tau, c, reward target
         # conditional energy + prior energy [batch_size, 6]
         si = torch.sin(theta)
@@ -49,37 +52,30 @@ class EnergyBasedModel:
         
         cond_energy = self.reward_model.energy(x, r_target)
         
-        prior_energy = 0.0
+        prior_energy = log_jacob
         
         return cond_energy + prior_energy
     
-    def transform_to_unconstrained_space(self, tau):
-        """ Physical [low, high] -> Unconstrained space (-inf, inf)"""
-        bounds_low = torch.tensor([self.prior.l1_bounds[0], self.prior.l2_bounds[0], self.prior.theta_bounds[0]]).to(self.device)
-        bounds_high = torch.tensor([self.prior.l1_bounds[1], self.prior.l2_bounds[1], self.prior.theta_bounds[1]]).to(self.device)
-        # Normalize to [0, 1]
-        p_norm = (tau - bounds_low) / (bounds_high - bounds_low)
-        # Apply Logit: log(p / (1-p))
+    def transform_to_phi(self, tau):
+        # tau must be a tensor, with  requires_grad=True
+        # Step 1: Normalize to [0, 1]
+        u = (tau - self.bounds_low) / (self.bounds_high - self.bounds_low)
+        # transform to between (-\infty, + \infty)
         # We add a tiny epsilon to prevent log(0)
         eps = 1e-6
-        p_norm = torch.clamp(p_norm, eps, 1.0 - eps)
-        phi = torch.log(p_norm / (1.0 - p_norm))
+        u = torch.clamp(u, eps, 1.0 - eps)
+        phi = torch.logit(u)
         return phi
     
-    def transform_to_physical_space(self, phi):
-        """Unconstrained (-inf, inf) -> Physical [low, high]"""
-        bounds_low = torch.tensor([self.prior.l1_bounds[0], self.prior.l2_bounds[0], self.prior.theta_bounds[0]]).to(self.device)
-        bounds_high = torch.tensor([self.prior.l1_bounds[1], self.prior.l2_bounds[1], self.prior.theta_bounds[1]]).to(self.device)
-        s = torch.sigmoid(phi)
-        tau = self.bounds_low + (bounds_high - bounds_low) * s
-        
-        # Calculate Log-Jacobian: log|d_tau / d_phi|
-        # This is required for MALA to stay mathematically 'correct'
-        log_det = torch.log(bounds_high - bounds_low) + \
-                torch.log(s + 1e-6) + torch.log(1.0 - s + 1e-6)
-        
-        return tau, log_det.sum(dim=-1)
-
+    def transform_to_tau(self, phi):
+        # phi must be a tensor, with  requires_grad=True
+        tau = self.bounds_low + (self.bounds_high - self.bounds_low) * torch.sigmoid(phi)
+        # do I need the log determinant here?
+        # log_det = torch.log(bounds_high - bounds_low) + \
+        #         torch.log(s + 1e-6) + torch.log(1.0 - s + 1e-6)
+        #log_det = log_det.sum(dim=-1)
+        return tau
+       
     def langevin_dynamics(self, c_target, r_target, batch_size=32, mc_corrected=False):
         
         # Logic:
@@ -100,7 +96,7 @@ class EnergyBasedModel:
         
         # 2. TRANSFORM tau by converting into unconstrained space (phi) using sigmoid
         
-        phi = self.transform_to_unconstrained_space(tau)
+        phi = self.transform_to_phi(tau)
 
         for i in range(self.n_sampling_steps):
             
@@ -115,10 +111,10 @@ class EnergyBasedModel:
             l2_current = current_tau[:, 1:2]
             theta_current = current_tau[:, 2:3]
             
-            energy = self.joint_energy(l1_current,l2_current,theta_current, c_target, r_target)
+            energy = self.joint_energy(l1_current,l2_current,theta_current, log_jacob, c_target, r_target)
             
             # Total MALA Energy = Physical Energy - Log Determinant
-            total_E = energy.sum() - log_jacob.sum()
+            total_E = energy.sum()
             
             # 4. GRADIENT STEP
             grad = torch.autograd.grad(total_E, phi)[0]

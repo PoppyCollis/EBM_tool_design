@@ -3,15 +3,18 @@ import torch
 
 class ToolDatasetConfig:
     
-    L1_BOUNDS = (150,300)
-    L2_BOUNDS = (150,300)
-    THETA_BOUNDS = (0,360)
+    L1_BOUNDS = (150.0,300.0) # make sure these are floats
+    L2_BOUNDS = (150.0,300.0)
+    THETA_BOUNDS = (0.0,360.0)
     
     NUM_DESIGNS = 1000
     
     REWARD_TYPE = "euclidean_distance"
     
     SAVE_PATH = 'src/ebm_tool_designer/data/dummy_dataset.parquet'
+    
+    DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+
     
     
     
