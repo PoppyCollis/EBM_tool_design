@@ -42,7 +42,7 @@ class RewardModelConfig:
     
 class EBMConfig:
     
-    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     SIGMA = 0.01
     SAMPLING_METHOD = 'langevin'
     N_SAMPLES = 100

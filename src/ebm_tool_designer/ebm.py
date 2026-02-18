@@ -5,7 +5,6 @@ import numpy as np
 from reward_model import MLP
 import torch
 from tool_design_prior import ToolDesignPrior
-from tool_dataset import ToolDataset
 from config import ToolDatasetConfig, EBMConfig, RewardModelConfig
     
 class EnergyBasedModel:
@@ -32,8 +31,9 @@ class EnergyBasedModel:
         # load the pre-trained weights into the model
         checkpoint = torch.load(weights_path)
         reward_model.load_state_dict(checkpoint['model_state_dict'])
-        feature_stats = checkpoint['feature_stats']
-        label_stats = checkpoint['label_stats']
+        # Move stats dictionaries to device
+        feature_stats = {k: v.to(self.device) for k, v in checkpoint['feature_stats'].items()}
+        label_stats = {k: v.to(self.device) for k, v in checkpoint['label_stats'].items()}
         # also need to load in normalisation stats for features
         reward_model.eval()
         reward_model.to(self.device)
@@ -65,14 +65,18 @@ class EnergyBasedModel:
     
     def langevin_dynamics(self, c_target, r_target, batch_size=32):
         
+        # NEED TO ADD NOISE KICK TO LANGEVIN, AND MAYBE METROPOLIS-HASTINGS CORRECTED SAMPLING?
+        
         # 1. start with a sample in tau space
         tau = self.prior.sample(batch_size)
-        print(" initial tau:", tau)
+        print(" initial tau:", tau.cpu().detach().numpy())
 
         # 2. translate to phi space
         # 2. translate to phi space
-        phi = self.prior.transform_to_phi(tau) # now we are tracking grads, phi is the leaf node
-        print(phi)
+        phi = self.prior.transform_to_phi(tau).detach().requires_grad_(True) # now we are tracking grads, phi is the leaf node
+        
+        c_target = c_target.detach()
+        r_target = r_target.detach()
 
         # 3. optimise in phi space
         optimizer = torch.optim.Adam([phi], lr=self.eta)
@@ -83,7 +87,7 @@ class EnergyBasedModel:
         
             tau_current = prior.transform_to_tau(phi) # re-derive tau from phi inside the loop.
 
-            energy = self.joint_energy(self, tau_current, c_target, r_target)
+            energy = self.joint_energy(tau_current, c_target, r_target)
         
             # backprop
             energy.backward()
@@ -92,9 +96,12 @@ class EnergyBasedModel:
             
         tau_final = tau_current
         
+        print("final tau:", tau_final.cpu().detach().numpy())
+        
         return tau_final
         
-    
+device = EBMConfig.DEVICE
+
 n_samples = 1
 
 prior = ToolDesignPrior(ToolDatasetConfig.L1_BOUNDS, ToolDatasetConfig.L2_BOUNDS, ToolDatasetConfig.THETA_BOUNDS, ToolDatasetConfig.DEVICE)
@@ -102,88 +109,26 @@ prior = ToolDesignPrior(ToolDatasetConfig.L1_BOUNDS, ToolDatasetConfig.L2_BOUNDS
 ebm = EnergyBasedModel(prior, weights_path=RewardModelConfig.WEIGHTS_SAVE_PATH)
 
 
-# sample a random target location
+# sample a random target location and set a reward target
 
 max_radius = prior.bounds_high[0] + prior.bounds_high[1]
-theta = torch.rand(n_samples) * 2 * np.pi
-r = max_radius * torch.sqrt(torch.rand(n_samples))
+theta = torch.rand(n_samples, device=device) * 2 * np.pi
+r = max_radius * torch.sqrt(torch.rand(n_samples, device=device))
 x = r * torch.cos(theta)
 y = r * torch.sin(theta)
 # Combine into a single tensor of shape (n_samples, 2)
 c_target = torch.stack([x, y], dim=-1)
 
-r_target = torch.tensor([-50.0]) # whats an appropriate reward?
+r_target = torch.tensor([-50.0], device=device) # whats an appropriate reward?
 
-# tool_sample = ebm.langevin_dynamics(c_target, r_target, batch_size=1)
+print(f"Target location: {c_target.cpu().detach().numpy()}, Reward target: {r_target.item()}")
 
+tool_sample = ebm.langevin_dynamics(c_target, r_target, batch_size=1)
 
+# todo:
+# add langevin noise kick
+# add MH correction
+# check energy is decreasing and converging
+# check predicted reward of final tool is close to reward 
 
-
-# tests: 
-# 1. get two tool vectors and work out the joint energy of each
-# 2. check energy is higher when reward pred is further from target
-# 3. 
-
-
-# CONSIDERATIONS:
-
-# The $\sin(\theta)^2 + \cos(\theta)^2 = 1$ Constraint. sample 3: $(l_1, l_2, \theta)$, This guarantees the angle is always valid.
-
-# the reward model was trained on normalised data: apply feature_stats to tau and c inside the joint energy function - 
-# If your reward model was trained on normalized data, you should be performing Langevin in the normalized space.
-
-# MALA combines Langevin Dynamics with a Metropolis-Hastings acceptance step. 
-
-
-"""
-        
-        # 1. INITIALISE tool params, tau, by sampling from the prior (e.g., [batch_size, 4])
-        
-        l1_init,l2_init,theta_init = self.prior.sample(batch_size)
-        
-        tau = torch.stack([l1_init, l2_init, theta_init], dim=-1).to(self.device).requires_grad_(True)
-        
-        c_target = c_target.to(self.device).detach()
-        
-        # 2. TRANSFORM tau by converting into unconstrained space (phi) using sigmoid
-        
-        phi = self.transform_to_phi(tau)
-
-        for i in range(self.n_sampling_steps):
-            
-            # 3. ENERGY CALCULATION
-        
-            # Convert phi back to physical tau inside the gradient tape
-            current_tau, log_jacob = self.transform_to_physical_space(phi)
-            
-            # Calculate energy using your existing joint_energy logic
-            # slice tau to get individual components for the Energy logic (which works on theta not sin(theta))
-            l1_current = current_tau[:, 0:1]
-            l2_current = current_tau[:, 1:2]
-            theta_current = current_tau[:, 2:3]
-            
-            energy = self.joint_energy(l1_current,l2_current,theta_current, log_jacob, c_target, r_target)
-            
-            # Total MALA Energy = Physical Energy - Log Determinant
-            total_E = energy.sum()
-            
-            # 4. GRADIENT STEP
-            grad = torch.autograd.grad(total_E, phi)[0]
-            
-            # 5. PROPOSAL (Langevin Step)
-            noise = torch.randn_like(phi)
-            phi_prop = phi - self.eta * grad + torch.sqrt(torch.tensor(2 * self.eta)) * noise
-            
-            # can perform Metropolis-Hastings Accept/Reject step here
-            if mc_corrected:
-                pass
-            
-            phi = phi_prop.detach().requires_grad_(True)
-
-        # 6. FINAL OUTPUT: Convert the last phi back to physical tau
-        with torch.no_grad():
-            final_tau, _ = self.transform_to_physical_space(phi)
-            
-        return final_tau
-                
-"""
+# plot the tool sample and visualise w.r.t. target location and show reward!
