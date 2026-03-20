@@ -44,7 +44,7 @@ def visualise_tools(designs, target_location=None, energies=None):
         
         ax.plot(xs, ys, '-o', lw=4, markersize=2, color='#2c3e50')
         
-        if target_location.any() is not None:
+        if target_location is not None:
             x = target_location.flatten()[0]
             y = target_location.flatten()[1]
             ax.scatter(x, y, color='red', s=100, label='Target Location', zorder=5)

@@ -7,7 +7,7 @@ class ToolDatasetConfig:
     L2_BOUNDS = (150.0,300.0)
     THETA_BOUNDS = (0.0,360.0)
     
-    NUM_DESIGNS = 1000
+    NUM_DESIGNS = 5000
     
     REWARD_TYPE = "euclidean_distance"
     
@@ -35,7 +35,7 @@ class RewardModelConfig:
     OUT_FEATURES = 64
     LEARNING_RATE = 1e-3
     BATCH_SIZE = 32
-    EPOCHS = 20
+    EPOCHS = 10
     
     SIGMA = 0.01 # 0.01 after normalizing all the continuous attributes to [0, 1]
     
@@ -45,7 +45,8 @@ class EBMConfig:
     DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     SIGMA = 1e-1
     SAMPLING_METHOD = 'langevin'
-    N_SAMPLES = 12
-    N_SAMPLING_STEPS = 5000
+    N_SAMPLES = 5
+    N_SAMPLING_STEPS = 10000
     ETA = 1e-4
-
+    
+    E_SCALING_FACTOR = 1e-5 # 1e-4

@@ -14,6 +14,9 @@ import torch
 from torch.utils.data import Dataset
 from config import ToolDatasetConfig
 
+import matplotlib.pyplot as plt
+
+
 
 class ToolDataset:
     def __init__(self, l1_range, l2_range, theta_range, reward_type = "mse"):
@@ -69,6 +72,8 @@ class ToolDataset:
         targets = self.sample_target_location(n_samples, max_radius)
 
         rewards = [] 
+        ee_x = [] 
+        ee_y = []
 
         # Calculate the end effector location with respect to the orgin of the tool at (0,0)
         for i in range(n_samples):
@@ -80,6 +85,9 @@ class ToolDataset:
             p1 = np.array([0, 0])           # Base
             p2 = np.array([0, l1])          # Joint (Vertical)
             p3 = np.array([l2 * np.sin(theta), l1 + l2 * np.cos(theta)]) # Tip
+            
+            ee_x.append(p3[0])
+            ee_y.append(p3[1])
             
             # Reward shaping
             
@@ -99,8 +107,8 @@ class ToolDataset:
         rewards = np.array(rewards)
         
         dataset = designs.copy()
-        dataset["end_effector_x"] = p3[0]
-        dataset["end_effector_y"] = p3[1]
+        dataset["end_effector_x"] = np.array(ee_x)
+        dataset["end_effector_y"] = np.array(ee_y)
         dataset["x_target"] = targets[:,0]
         dataset["y_target"] = targets[:,1]
         dataset["reward"] =  rewards.flatten()
@@ -142,16 +150,47 @@ def main():
     
     tool_dataset = ToolDataset(l1_bounds, l2_bounds, theta_bounds, reward_type)
 
-    num_designs = ToolDatasetConfig.NUM_DESIGNS
+    num_designs = 10000 #ToolDatasetConfig.NUM_DESIGNS
     
-    designs = tool_dataset.sample_design(num_designs)
-    # visualise_tools(designs)
-    # print(designs)
+    #designs = tool_dataset.sample_design(num_designs)
+    #print("designs", designs)
+    #visualise_tools(designs)
+    #print(designs)
     data = tool_dataset.sample_dataset(num_designs)
+    #print("data", data)
+    #visualise_tools(data)
+
 
     df = pd.DataFrame(data)
     #print(df["reward"].max())
-    df.to_parquet(save_file)
+    #df.to_parquet(save_file)
+    
+
+    # Assuming your dataframe is named df
+    # Set the number of columns for the grid
+    n_cols = 3
+    n_rows = (len(df.columns) + n_cols - 1) // n_cols
+
+    # Create the figure
+    plt.figure(figsize=(15, 4 * n_rows))
+
+    for i, col in enumerate(df.columns):
+        plt.subplot(n_rows, n_cols, i + 1)
+        # Plotting the histogram
+        plt.hist(df[col], bins=30, color='skyblue', edgecolor='black', alpha=0.7)
+        
+        # Formatting titles and labels with LaTeX-style names
+        title_label = col.replace('_', ' ')
+        plt.title(f'Distribution of {title_label}')
+        plt.xlabel('Value')
+        plt.ylabel('Frequency')
+        plt.grid(axis='y', alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
+    
+    # load in dataframe
+    # plot the distribution of lengths and angles
     
     
 

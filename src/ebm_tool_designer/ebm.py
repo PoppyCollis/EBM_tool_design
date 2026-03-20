@@ -65,9 +65,7 @@ class EnergyBasedModel:
         return cond_energy + prior_energy
     
     def langevin_dynamics(self, c_target, r_target, batch_size):
-        
-        # NEED TO ADD NOISE KICK TO LANGEVIN, AND MAYBE METROPOLIS-HASTINGS CORRECTED SAMPLING?
-        
+            
         # 1. start with a sample in tau space
         tau = self.prior.sample(batch_size)
         #print(" initial tau:", tau.cpu().detach().numpy())
@@ -93,7 +91,7 @@ class EnergyBasedModel:
             
             sigmoid_phi = torch.sigmoid(phi)
             log_det_jacobian = torch.log((self.prior.bounds_high - self.prior.bounds_low) * sigmoid_phi * (1 - sigmoid_phi) + 1e-8).sum()
-            energy = 1e-5 * self.joint_energy(tau_current, c_target, r_target) - log_det_jacobian
+            energy = EBMConfig.E_SCALING_FACTOR * self.joint_energy(tau_current, c_target, r_target) - log_det_jacobian
             
             # Check the magnitude of the two forces
             if i ==0:
@@ -137,7 +135,7 @@ y = r * torch.sin(theta)
 # Combine into a single tensor of shape (n_samples, 2)
 single_c_target = torch.stack([x, y], dim=-1)
 
-single_r_target = torch.tensor([0.0], device=device) # whats an appropriate reward?
+single_r_target = torch.tensor([10.0], device=device) # whats an appropriate reward?
 
 print(f"Target location: {single_c_target.cpu().detach().numpy()}, Reward target: {single_r_target.item()}")
 
@@ -174,7 +172,7 @@ if n_samples < 25:
 
 # todo:
 # make it work for batch
-# add log det of jacobian to overleafx
+# add log det of jacobian to overleaf
 # add MH correction?
 # optimise lr and iter size, check energy is decreasing and converging
 # check predicted reward of final tool is close to reward 
