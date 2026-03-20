@@ -133,9 +133,14 @@ x = r * torch.cos(theta)
 y = r * torch.sin(theta)
 
 # Combine into a single tensor of shape (n_samples, 2)
+
+# short cut
+#single_c_target = torch.stack([x, y], dim=-1)
+x = torch.tensor([200.0], device=device)
+y = torch.tensor([200.0], device=device)
 single_c_target = torch.stack([x, y], dim=-1)
 
-single_r_target = torch.tensor([10.0], device=device) # whats an appropriate reward?
+single_r_target = torch.tensor([0.0], device=device) # whats an appropriate reward?
 
 print(f"Target location: {single_c_target.cpu().detach().numpy()}, Reward target: {single_r_target.item()}")
 
@@ -162,8 +167,8 @@ plot_energy_hist(energy_hist)
 
 energy_per_tool = final_tool_energies.cpu().detach().numpy().flatten()
 
-print("energies", energy_per_tool)
-print("tools", tool_sample.cpu().detach().numpy())
+#print("energies", energy_per_tool)
+#print("tools", tool_sample.cpu().detach().numpy())
 
 if n_samples < 25:
     visualise_tools(designs, target_location=single_c_target.cpu().detach().numpy(), energies = energy_per_tool)

@@ -9,12 +9,10 @@ Note that we return sin(theta) and cos(theta) so that the network understands th
 
 import numpy as np
 import pandas as pd
-from helpers.plots import visualise_tools
+from helpers.plots import visualise_tools, visualise_dataset_distribution, visualise_end_effector_dist, visualise_target_loc_dist
 import torch
 from torch.utils.data import Dataset
 from config import ToolDatasetConfig
-
-import matplotlib.pyplot as plt
 
 
 
@@ -69,7 +67,7 @@ class ToolDataset:
         designs = self.sample_design(n_samples)
         
         max_radius = ((self.l1_bounds[1] - self.l1_bounds[0]) + (self.l2_bounds[1] - self.l2_bounds[0]))
-        targets = self.sample_target_location(n_samples, max_radius)
+        #targets = self.sample_target_location(n_samples, max_radius)
 
         rewards = [] 
         ee_x = [] 
@@ -88,30 +86,49 @@ class ToolDataset:
             
             ee_x.append(p3[0])
             ee_y.append(p3[1])
-            
+                    
             # Reward shaping
             
-            if self.reward_type == "euclidean_distance":
-                reward = -np.sqrt( (p3[0]- targets[i][0])**2 + (p3[1] - targets[i][1])**2)
+            # if self.reward_type == "euclidean_distance":
+            #     reward = -np.sqrt( (p3[0]- targets[i][0])**2 + (p3[1] - targets[i][1])**2)
                 
-            elif self.reward_type == "mse":
-                reward = -((p3[0]- targets[i][0])**2 + (p3[1] - targets[i][1])**2)
+            # elif self.reward_type == "mse":
+            #     reward = -((p3[0]- targets[i][0])**2 + (p3[1] - targets[i][1])**2)
                 
-            elif self.reward_type == "saturated_euclidean_distance":
-                reward = -np.tanh(np.sqrt( (p3[0]- targets[i][0])**2 + (p3[1] - targets[i][1])**2))
-            else:
-                raise NotImplementedError("Reward type not supported.")
+            # elif self.reward_type == "saturated_euclidean_distance":
+            #     reward = -np.tanh(np.sqrt( (p3[0]- targets[i][0])**2 + (p3[1] - targets[i][1])**2))
+            # else:
+            #     raise NotImplementedError("Reward type not supported.")
             
-            rewards.append(reward)
-                
-        rewards = np.array(rewards)
+            # rewards.append(reward)
+            
+        ee_x = np.array(ee_x)
+        ee_y = np.array(ee_y)
+
+        # 2. SHUFFLE: Create targets by scrambling the end effector positions
+        indices = np.random.permutation(n_samples)
+        targets_x = ee_x[indices]
+        targets_y = ee_y[indices]
+        
+        noise = np.random.normal(0, 5.0, size=(n_samples, 2))
+        targets_x += noise[:, 0]
+        targets_y += noise[:, 1]
+        
+        if self.reward_type == "euclidean_distance":
+            rewards = -np.sqrt((ee_x - targets_x)**2 + (ee_y - targets_y)**2)
+        elif self.reward_type == "mse":
+            rewards = -((ee_x - targets_x)**2 + (ee_y - targets_y)**2)
+        elif self.reward_type == "saturated_euclidean_distance":
+            eucl_dist = np.sqrt((ee_x - targets_x)**2 + (ee_y - targets_y)**2)
+            rewards = -np.tanh(eucl_dist / 600)
         
         dataset = designs.copy()
         dataset["end_effector_x"] = np.array(ee_x)
         dataset["end_effector_y"] = np.array(ee_y)
-        dataset["x_target"] = targets[:,0]
-        dataset["y_target"] = targets[:,1]
+        dataset["x_target"] = targets_x
+        dataset["y_target"] = targets_y
         dataset["reward"] =  rewards.flatten()
+        
         return dataset
     
 class CustomDataset(Dataset):
@@ -150,7 +167,7 @@ def main():
     
     tool_dataset = ToolDataset(l1_bounds, l2_bounds, theta_bounds, reward_type)
 
-    num_designs = 10000 #ToolDatasetConfig.NUM_DESIGNS
+    num_designs = ToolDatasetConfig.NUM_DESIGNS
     
     #designs = tool_dataset.sample_design(num_designs)
     #print("designs", designs)
@@ -163,36 +180,13 @@ def main():
 
     df = pd.DataFrame(data)
     #print(df["reward"].max())
-    #df.to_parquet(save_file)
-    
+    df.to_parquet(save_file)
 
-    # Assuming your dataframe is named df
-    # Set the number of columns for the grid
-    n_cols = 3
-    n_rows = (len(df.columns) + n_cols - 1) // n_cols
 
-    # Create the figure
-    plt.figure(figsize=(15, 4 * n_rows))
-
-    for i, col in enumerate(df.columns):
-        plt.subplot(n_rows, n_cols, i + 1)
-        # Plotting the histogram
-        plt.hist(df[col], bins=30, color='skyblue', edgecolor='black', alpha=0.7)
-        
-        # Formatting titles and labels with LaTeX-style names
-        title_label = col.replace('_', ' ')
-        plt.title(f'Distribution of {title_label}')
-        plt.xlabel('Value')
-        plt.ylabel('Frequency')
-        plt.grid(axis='y', alpha=0.3)
-
-    plt.tight_layout()
-    plt.show()
+    visualise_dataset_distribution(df)
+    visualise_end_effector_dist(df)
     
-    # load in dataframe
-    # plot the distribution of lengths and angles
-    
-    
+    visualise_target_loc_dist(df)
 
 if __name__ == "__main__":
     main()   

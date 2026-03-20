@@ -115,3 +115,67 @@ def plot_energy_hist(energy_hist):
     plt.ylabel('Energy')
     plt.legend()
     plt.show()
+    
+    
+
+
+def visualise_dataset_distribution(df):
+    
+    # Set the number of columns for the grid
+    n_cols = 3
+    n_rows = (len(df.columns) + n_cols - 1) // n_cols
+
+    # Create the figure
+    plt.figure(figsize=(15, 4 * n_rows))
+
+    for i, col in enumerate(df.columns):
+        plt.subplot(n_rows, n_cols, i + 1)
+        # Plotting the histogram
+        plt.hist(df[col], bins=30, color='skyblue', edgecolor='black', alpha=0.7)
+        
+        # Formatting titles and labels with LaTeX-style names
+        title_label = col.replace('_', ' ')
+        plt.title(f'Distribution of {title_label}')
+        plt.xlabel('Value')
+        plt.ylabel('Frequency')
+        plt.grid(axis='y', alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
+    
+def visualise_end_effector_dist(df):
+    
+    fig, ax = plt.subplots(figsize=(10, 7))
+
+    # Now ax.hexbin will work directly
+    hb1 = ax.hexbin(df['end_effector_x'], df['end_effector_y'], 
+                    gridsize=40, cmap='viridis', mincnt=1)
+    
+    # Add the colorbar to the single ax
+    fig.colorbar(hb1, ax=ax, label='Sample Count')
+    
+    ax.set_title("End Effector Position Density\n(The 'Potential' Workspace)")
+    ax.set_xlabel("X Position")
+    ax.set_ylabel("Y Position")
+    ax.set_aspect('equal')
+
+    plt.tight_layout()
+    plt.show() 
+    
+def visualise_target_loc_dist(df):
+    
+    fig, ax = plt.subplots(figsize=(10, 7))
+
+    # 2. Target Location Heatmap (The "Goals")
+    hb2 = ax.hexbin(df['x_target'], df['y_target'], 
+                    gridsize=40, cmap='magma', mincnt=1)
+    # Add the colorbar to the single ax
+    fig.colorbar(hb2, ax=ax, label='Sample Count')
+    
+    ax.set_title("Target Location Density\n(Should match the EE Distribution)")
+    ax.set_xlabel("X Position")
+    ax.set_ylabel("Y Position")
+    ax.set_aspect('equal')
+
+    plt.tight_layout()
+    plt.show()

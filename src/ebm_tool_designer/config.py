@@ -7,9 +7,9 @@ class ToolDatasetConfig:
     L2_BOUNDS = (150.0,300.0)
     THETA_BOUNDS = (0.0,360.0)
     
-    NUM_DESIGNS = 5000
+    NUM_DESIGNS = 10000
     
-    REWARD_TYPE = "euclidean_distance"
+    REWARD_TYPE = "saturated_euclidean_distance"
     
     SAVE_PATH = 'src/ebm_tool_designer/data/dummy_dataset.parquet'
     
@@ -45,7 +45,7 @@ class EBMConfig:
     DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     SIGMA = 1e-1
     SAMPLING_METHOD = 'langevin'
-    N_SAMPLES = 5
+    N_SAMPLES = 10
     N_SAMPLING_STEPS = 10000
     ETA = 1e-4
     
